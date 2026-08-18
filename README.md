@@ -2,6 +2,8 @@
 
 An offline-first worldbuilding and story-planning studio, native Android (Kotlin + Jetpack Compose).
 
+Where i am currently (Using AI to summarise the current progress stage)
+
 **Status: Phase 7 — testing pass, and a real performance bug found and fixed.** This round focused on the testing categories the roadmap called for at the core layer (unit/repository/storage/integration), plus Batch Commands and Template categories/built-ins. The most consequential result: an actual performance test at scale caught a genuine O(n²)-shaped bug, not a false alarm.
 
 ## The performance finding (read this one first)
