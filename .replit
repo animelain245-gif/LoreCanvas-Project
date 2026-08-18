@@ -1,0 +1,2 @@
+run = "bash scripts/replit-build.sh"
+entrypoint = "scripts/replit-build.sh"

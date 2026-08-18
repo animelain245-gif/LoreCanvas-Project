@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme. Compose supplies the real theming
+         (see ui/theme/Theme.kt); this XML parent just satisfies the
+         Android manifest requirement for a launch theme. -->
+    <style name="Theme.LoreCanvas" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

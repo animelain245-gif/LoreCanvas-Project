@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.LoreCanvas"
+        android:supportsRtl="true">
+
+        <!--
+          LoreCanvas is offline-first (LCD-002, Chapter 6 in the source
+          design docs — "the application must never assume an internet
+          connection exists"). No INTERNET permission is declared: the
+          Phase 1 shell has no network dependency, and none should be
+          added later without a deliberate reason.
+        -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.LoreCanvas">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
