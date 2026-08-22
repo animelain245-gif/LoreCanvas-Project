@@ -28,6 +28,8 @@ class CreateCardCommand(
     override val label: String = "Create Card"
     var createdCard: Card? = null
         private set
+    var lastError: RepositoryError? = null
+        private set
 
     /** See [CreateNodeCommand]'s doc comment on this same field — redo must re-insert the same Card via [CardRepository.restore], not mint a new UUID or call [CardRepository.save] (which requires the id already exist). */
     private var hasCreatedOnce = false
@@ -35,9 +37,12 @@ class CreateCardCommand(
     override fun execute() {
         if (!hasCreatedOnce) {
             val result = cardRepository.create(parentNodeId, title, type, content)
-            if (result is com.lorecanvas.common.LcResult.Ok) {
-                createdCard = result.value
-                hasCreatedOnce = true
+            when (result) {
+                is com.lorecanvas.common.LcResult.Ok -> {
+                    createdCard = result.value
+                    hasCreatedOnce = true
+                }
+                is com.lorecanvas.common.LcResult.Fail -> lastError = result.error
             }
         } else {
             createdCard?.let { cardRepository.restore(it) }

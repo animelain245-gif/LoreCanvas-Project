@@ -34,6 +34,15 @@ class CreateNodeCommand(
         private set
 
     /**
+     * Preserves the specific validation/storage error when [create] fails
+     * (e.g. a blank name), so the UI can show it instead of a generic
+     * message. Doesn't touch the [Command] interface — this is a plain
+     * additive property, same shape as [createdNode].
+     */
+    var lastError: RepositoryError? = null
+        private set
+
+    /**
      * [CommandHistory.redo] re-invokes [execute] rather than having a
      * separate "redo" path — correct for every other Command in this
      * file, since renaming/re-tagging/etc. are naturally idempotent to
@@ -51,9 +60,12 @@ class CreateNodeCommand(
     override fun execute() {
         if (!hasCreatedOnce) {
             val result = nodeRepository.create(name, type, summary)
-            if (result is com.lorecanvas.common.LcResult.Ok) {
-                createdNode = result.value
-                hasCreatedOnce = true
+            when (result) {
+                is com.lorecanvas.common.LcResult.Ok -> {
+                    createdNode = result.value
+                    hasCreatedOnce = true
+                }
+                is com.lorecanvas.common.LcResult.Fail -> lastError = result.error
             }
         } else {
             createdNode?.let { nodeRepository.restore(it) }

@@ -32,6 +32,8 @@ class CreateTimelineCommand(
     override val label: String = "Create Timeline"
     var createdTimeline: Timeline? = null
         private set
+    var lastError: RepositoryError? = null
+        private set
 
     /** See [CreateNodeCommand]'s doc comment on this same field — redo must re-insert the same Timeline via [TimelineRepository.restore], not mint a new UUID or call [TimelineRepository.save] (which requires the id already exist). */
     private var hasCreatedOnce = false
@@ -39,9 +41,12 @@ class CreateTimelineCommand(
     override fun execute() {
         if (!hasCreatedOnce) {
             val result = timelineRepository.create(name, description)
-            if (result is com.lorecanvas.common.LcResult.Ok) {
-                createdTimeline = result.value
-                hasCreatedOnce = true
+            when (result) {
+                is com.lorecanvas.common.LcResult.Ok -> {
+                    createdTimeline = result.value
+                    hasCreatedOnce = true
+                }
+                is com.lorecanvas.common.LcResult.Fail -> lastError = result.error
             }
         } else {
             createdTimeline?.let { timelineRepository.restore(it) }
@@ -102,6 +107,8 @@ class AddTimelineEventCommand(
     override val label: String = "Add Timeline Event"
     var createdEvent: TimelineEvent? = null
         private set
+    var lastError: RepositoryError? = null
+        private set
 
     /**
      * See [CreateNodeCommand]'s doc comment on this same field. Here the
@@ -117,9 +124,12 @@ class AddTimelineEventCommand(
     override fun execute() {
         if (!hasCreatedOnce) {
             val result = timelineRepository.addEvent(timeline, date, title, description, relatedNodeIds)
-            if (result is com.lorecanvas.common.LcResult.Ok) {
-                createdEvent = result.value
-                hasCreatedOnce = true
+            when (result) {
+                is com.lorecanvas.common.LcResult.Ok -> {
+                    createdEvent = result.value
+                    hasCreatedOnce = true
+                }
+                is com.lorecanvas.common.LcResult.Fail -> lastError = result.error
             }
         } else {
             createdEvent?.let {

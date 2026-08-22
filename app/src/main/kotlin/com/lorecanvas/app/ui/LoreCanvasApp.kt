@@ -310,7 +310,7 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                             val nodes = withContext(Dispatchers.IO) { state.ctx.nodeRepository.list() }
                             state.copy(nodes = nodes)
                         } else {
-                            state.copy(status = "Could not create node.", isError = true)
+                            state.copy(status = command.lastError?.userMessage() ?: "Could not create node.", isError = true)
                         }
                     }
                 },
@@ -430,7 +430,7 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                             val cards = withContext(Dispatchers.IO) { state.ctx.cardRepository.listForNode(state.node.id) }
                             state.copy(cards = cards)
                         } else {
-                            state.copy(status = "Could not create card.", isError = true)
+                            state.copy(status = command.lastError?.userMessage() ?: "Could not create card.", isError = true)
                         }
                     }
                 },
@@ -445,7 +445,7 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                             val rels = withContext(Dispatchers.IO) { state.ctx.relationshipRepository.listForNode(state.node.id) }
                             state.copy(relationships = rels)
                         } else {
-                            state.copy(status = "Could not create relationship.", isError = true)
+                            state.copy(status = command.lastError?.userMessage() ?: "Could not create relationship.", isError = true)
                         }
                     }
                 },
@@ -569,7 +569,7 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                         uiState = if (command.createdEvent != null) {
                             state.copy(status = null)
                         } else {
-                            state.copy(status = "Could not add event.", isError = true)
+                            state.copy(status = command.lastError?.userMessage() ?: "Could not add event.", isError = true)
                         }
                     }
                 },

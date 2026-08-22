@@ -38,6 +38,8 @@ class CreateRelationshipCommand(
     override val label: String = "Create Relationship"
     var createdRelationship: Relationship? = null
         private set
+    var lastError: RepositoryError? = null
+        private set
 
     /** See [CreateNodeCommand]'s doc comment on this same field — redo must re-insert the same Relationship via [RelationshipRepository.restore], not mint a new UUID or call [RelationshipRepository.save] (which requires the id already exist). */
     private var hasCreatedOnce = false
@@ -45,9 +47,12 @@ class CreateRelationshipCommand(
     override fun execute() {
         if (!hasCreatedOnce) {
             val result = relationshipRepository.create(sourceNodeId, targetNodeId, type, direction, description)
-            if (result is com.lorecanvas.common.LcResult.Ok) {
-                createdRelationship = result.value
-                hasCreatedOnce = true
+            when (result) {
+                is com.lorecanvas.common.LcResult.Ok -> {
+                    createdRelationship = result.value
+                    hasCreatedOnce = true
+                }
+                is com.lorecanvas.common.LcResult.Fail -> lastError = result.error
             }
         } else {
             createdRelationship?.let { relationshipRepository.restore(it) }
