@@ -33,9 +33,31 @@ class CreateNodeCommand(
     var createdNode: Node? = null
         private set
 
+    /**
+     * [CommandHistory.redo] re-invokes [execute] rather than having a
+     * separate "redo" path — correct for every other Command in this
+     * file, since renaming/re-tagging/etc. are naturally idempotent to
+     * repeat. Create is the one exception: [NodeRepository.create] always
+     * mints a *fresh* UUID via [Node.create], so calling it a second time
+     * on redo would silently produce a different Node than the one undo
+     * just deleted, orphaning any UI reference to the original. This flag
+     * makes redo re-insert the *same* Node object via [NodeRepository.restore]
+     * instead of minting a new one. (Plain [NodeRepository.save] won't
+     * work here either — it requires the id already exist in storage,
+     * which it won't right after undo deleted it.)
+     */
+    private var hasCreatedOnce = false
+
     override fun execute() {
-        val result = nodeRepository.create(name, type, summary)
-        if (result is com.lorecanvas.common.LcResult.Ok) createdNode = result.value
+        if (!hasCreatedOnce) {
+            val result = nodeRepository.create(name, type, summary)
+            if (result is com.lorecanvas.common.LcResult.Ok) {
+                createdNode = result.value
+                hasCreatedOnce = true
+            }
+        } else {
+            createdNode?.let { nodeRepository.restore(it) }
+        }
     }
 
     /** Undoing a create removes the Node — the one case where this module does call delete(), on a Node this same command just made. */
