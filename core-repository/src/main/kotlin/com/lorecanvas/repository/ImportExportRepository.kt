@@ -2,6 +2,7 @@ package com.lorecanvas.repository
 
 import com.lorecanvas.common.LcResult
 import com.lorecanvas.common.Logger
+import com.lorecanvas.common.UuidService
 import com.lorecanvas.common.createLogger
 import com.lorecanvas.storage.CardStorage
 import com.lorecanvas.storage.FileManager
@@ -111,6 +112,59 @@ class ImportExportRepository(
                 RepositoryError.ValidationFailed(
                     "This export was made with format version '${bundle.formatVersion}', but this version of LoreCanvas " +
                         "supports '$CURRENT_EXPORT_FORMAT_VERSION'. A migration path may be added in a future version."
+                )
+            )
+        }
+
+        // Security/integrity check: every id must actually be a UUID before it's
+        // trusted for anything — in particular, before it's used to build a file
+        // path (nodeFile/cardFile/etc. all do `File(dir, "$id.json")` with no
+        // further sanitization of their own). A crafted import bundle with e.g.
+        // `"id": "../../../../somewhere"` would otherwise let import() write a
+        // file outside the intended nodes/cards/relationships/timelines
+        // subdirectory. Checked here, before ANY write (including the backup
+        // step below), for the same reason the conflict check right after this
+        // one is: "the project must never be left in an intermediate state."
+        val invalidIds = mutableListOf<String>()
+        bundle.nodes.forEach { if (!UuidService.isValid(it.id)) invalidIds.add("node ${it.id}") }
+        bundle.cards.forEach { if (!UuidService.isValid(it.id)) invalidIds.add("card ${it.id}") }
+        bundle.relationships.forEach { if (!UuidService.isValid(it.id)) invalidIds.add("relationship ${it.id}") }
+        bundle.timelines.forEach {
+            if (!UuidService.isValid(it.id)) invalidIds.add("timeline ${it.id}")
+            it.events.forEach { event -> if (!UuidService.isValid(event.id)) invalidIds.add("timeline event ${event.id}") }
+        }
+        if (invalidIds.isNotEmpty()) {
+            return LcResult.fail(
+                RepositoryError.ValidationFailed(
+                    "Import refused: ${invalidIds.size} item(s) have an invalid id (e.g. ${invalidIds.first()})."
+                )
+            )
+        }
+
+        // Referential integrity: import() writes directly to Storage (bulk-creating
+        // everything from one self-contained bundle), bypassing the existence checks
+        // CardRepository.create()/RelationshipRepository.create() normally enforce for
+        // the ordinary single-item path (a Card's parentNodeId, a Relationship's
+        // sourceNodeId/targetNodeId, must reference a real Node). Without this, a
+        // corrupt or hand-edited bundle could silently create orphaned Cards/
+        // Relationships that reference no Node at all — invisible in the UI (which
+        // looks Cards up *by* parentNodeId) and a problem for anything, like the Graph
+        // module, that assumes a Relationship's endpoints are real. Checked against the
+        // *bundle's own* node ids, not existing Storage — every node referenced here is
+        // about to be created fresh by this same import, not already on disk.
+        val bundleNodeIds = bundle.nodes.map { it.id }.toSet()
+        val danglingRefs = mutableListOf<String>()
+        bundle.cards.forEach {
+            if (it.parentNodeId !in bundleNodeIds) danglingRefs.add("card ${it.id} references a node (${it.parentNodeId}) not included in this import")
+        }
+        bundle.relationships.forEach {
+            if (it.sourceNodeId !in bundleNodeIds) danglingRefs.add("relationship ${it.id} references a source node (${it.sourceNodeId}) not included in this import")
+            if (it.targetNodeId !in bundleNodeIds) danglingRefs.add("relationship ${it.id} references a target node (${it.targetNodeId}) not included in this import")
+        }
+        if (danglingRefs.isNotEmpty()) {
+            return LcResult.fail(
+                RepositoryError.ValidationFailed(
+                    "Import refused: ${danglingRefs.size} item(s) reference a node not included in this import (e.g. ${danglingRefs.first()})."
                 )
             )
         }

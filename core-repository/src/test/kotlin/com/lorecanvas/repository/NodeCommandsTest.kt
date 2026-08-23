@@ -84,4 +84,30 @@ class NodeCommandsTest : CommandTestFixture() {
         history.undo() // undoes the second (no-op) add
         assertTrue(node.tags.contains("hero"), "Undoing a duplicate add-tag must not remove a tag that was already present before it")
     }
+
+    @Test fun `delete is refused while a Card, a Relationship, or a Timeline event still references the node`() {
+        // Confirms NodeRepository.dependentsOf()/delete() actually blocks deletion —
+        // found via audit that no test previously exercised this at all, because the
+        // test fixture wasn't wiring cardStorage/relationshipStorage/timelineStorage
+        // into NodeRepository the way the real app does.
+        val a = (nodeRepo.create("Alice", "Character") as com.lorecanvas.common.LcResult.Ok).value
+        val b = (nodeRepo.create("Bob", "Character") as com.lorecanvas.common.LcResult.Ok).value
+
+        val card = (cardRepo.create(a.id, "Bio", "Note") as com.lorecanvas.common.LcResult.Ok).value
+        assertTrue(nodeRepo.delete(a.id) is com.lorecanvas.common.LcResult.Fail, "Delete must be refused while a Card still references this node")
+        cardRepo.delete(card.id)
+
+        val rel = (relRepo.create(a.id, b.id, "Friend") as com.lorecanvas.common.LcResult.Ok).value
+        assertTrue(nodeRepo.delete(a.id) is com.lorecanvas.common.LcResult.Fail, "Delete must be refused while a Relationship still references this node")
+        relRepo.delete(rel.id)
+
+        val timeline = (timelineRepo.create("History") as com.lorecanvas.common.LcResult.Ok).value
+        val event = (timelineRepo.addEvent(timeline, "1000", "Something happened", relatedNodeIds = listOf(a.id)) as com.lorecanvas.common.LcResult.Ok).value
+        assertTrue(nodeRepo.delete(a.id) is com.lorecanvas.common.LcResult.Fail, "Delete must be refused while a Timeline event still references this node")
+        timelineRepo.removeEvent(timeline, event.id)
+
+        // Now that nothing references it, delete should finally succeed.
+        assertTrue(nodeRepo.delete(a.id) is com.lorecanvas.common.LcResult.Ok, "Delete should succeed once no Card/Relationship/Timeline event references this node")
+        assertNull(nodeRepo.get(a.id))
+    }
 }

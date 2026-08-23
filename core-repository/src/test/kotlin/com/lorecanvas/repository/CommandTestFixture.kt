@@ -29,10 +29,24 @@ abstract class CommandTestFixture {
     protected fun setUpFixture() {
         projectDir = Files.createTempDirectory("lorecanvas_test_").toFile()
         eventBus = EventBus()
-        nodeRepo = NodeRepository(projectDir, NodeFileStorage(), eventBus)
-        cardRepo = CardRepository(projectDir, CardFileStorage(), NodeFileStorage(), eventBus)
-        relRepo = RelationshipRepository(projectDir, RelationshipFileStorage(), NodeFileStorage(), eventBus)
-        timelineRepo = TimelineRepository(projectDir, TimelineFileStorage(), eventBus)
+        val nodeFileStorage = NodeFileStorage()
+        val cardFileStorage = CardFileStorage()
+        val relationshipFileStorage = RelationshipFileStorage()
+        val timelineFileStorage = TimelineFileStorage()
+        // Wired identically to LoreCanvasApp.kt's real construction — NodeRepository's
+        // cardStorage/relationshipStorage/timelineStorage params are optional (default
+        // null), which silently disables parts of delete()'s dependents-check if left
+        // unwired. Found via audit that this fixture previously omitted them, meaning
+        // no test in this suite had ever actually exercised that safety check.
+        nodeRepo = NodeRepository(
+            projectDir, nodeFileStorage, eventBus,
+            cardStorage = cardFileStorage,
+            relationshipStorage = relationshipFileStorage,
+            timelineStorage = timelineFileStorage
+        )
+        cardRepo = CardRepository(projectDir, cardFileStorage, nodeFileStorage, eventBus)
+        relRepo = RelationshipRepository(projectDir, relationshipFileStorage, nodeFileStorage, eventBus)
+        timelineRepo = TimelineRepository(projectDir, timelineFileStorage, eventBus)
         history = CommandHistory()
     }
 
