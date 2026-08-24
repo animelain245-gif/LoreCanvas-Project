@@ -21,6 +21,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
@@ -283,6 +284,7 @@ fun NodeEditorScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreateCardDialog(onDismiss: () -> Unit, onConfirm: (title: String, type: String) -> Unit) {
     var title by remember { mutableStateOf("") }
@@ -321,6 +323,7 @@ private fun CreateCardDialog(onDismiss: () -> Unit, onConfirm: (title: String, t
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreateRelationshipDialog(
     otherNodes: List<Node>,
