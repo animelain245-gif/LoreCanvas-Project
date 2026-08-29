@@ -68,7 +68,9 @@ fun WorkspaceScreen(
     onOpenGraph: () -> Unit,
     onOpenTemplates: () -> Unit,
     onExportProject: () -> Unit,
-    onImportProject: () -> Unit
+    onImportProject: () -> Unit,
+    onStartWriting: () -> Unit,
+    onOpenManuscript: () -> Unit
 ) {
     var nameField by remember(project.id) { mutableStateOf(project.name) }
     var newTag by remember { mutableStateOf("") }
@@ -93,6 +95,8 @@ fun WorkspaceScreen(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Button(onClick = onStartWriting) { Text("Start Writing") }
+                OutlinedButton(onClick = onOpenManuscript) { Text("Story") }
                 OutlinedButton(onClick = onOpenTimelines) { Text("Timeline") }
                 OutlinedButton(onClick = onOpenSearch) { Text("Search") }
                 OutlinedButton(onClick = onOpenGraph) { Text("Graph") }

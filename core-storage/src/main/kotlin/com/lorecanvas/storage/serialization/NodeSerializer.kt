@@ -5,6 +5,7 @@ import com.lorecanvas.common.JsonParseException
 import com.lorecanvas.common.JsonValue
 import com.lorecanvas.common.jsonArrayOf
 import com.lorecanvas.common.jsonObjectOf
+import com.lorecanvas.common.optionalInt
 import com.lorecanvas.common.optionalString
 import com.lorecanvas.common.requireString
 import com.lorecanvas.common.stringList
@@ -29,7 +30,10 @@ object NodeSerializer {
             "status" to node.status.name.toJson(),
             "tags" to jsonArrayOf(node.tags.map { it.toJson() }),
             "createdAt" to node.createdAt.toJson(),
-            "modifiedAt" to node.modifiedAt.toJson()
+            "modifiedAt" to node.modifiedAt.toJson(),
+            "parentNodeId" to (node.parentNodeId?.toJson() ?: JsonValue.JsonNull),
+            "displayOrder" to JsonValue.JsonNumber(node.displayOrder.toDouble()),
+            "isPinned" to JsonValue.JsonBool(node.isPinned)
         )
         return Json.stringify(obj, pretty = true)
     }
@@ -57,6 +61,10 @@ object NodeSerializer {
                 return DeserializeResult.Malformed("Unknown node status: '$statusRaw'")
             }
 
+            val parentNodeIdRaw = obj["parentNodeId"]
+            val parentNodeId = if (parentNodeIdRaw is JsonValue.JsonString) parentNodeIdRaw.value else null
+            val isPinned = (obj["isPinned"] as? JsonValue.JsonBool)?.value ?: false
+
             val node = Node.restore(
                 id = obj.requireString("id"),
                 createdAt = obj.requireString("createdAt"),
@@ -65,7 +73,10 @@ object NodeSerializer {
                 type = obj.requireString("type"),
                 summary = obj.optionalString("summary"),
                 status = status,
-                tags = obj.stringList("tags")
+                tags = obj.stringList("tags"),
+                parentNodeId = parentNodeId,
+                displayOrder = obj.optionalInt("displayOrder", default = 0),
+                isPinned = isPinned
             )
             DeserializeResult.Success(node)
         } catch (e: JsonParseException) {

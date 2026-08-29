@@ -17,7 +17,12 @@ enum class NodeStatus { ACTIVE, ARCHIVED }
  * These are just the starting suggestions a picker UI can offer.
  */
 object NodeTypes {
+    const val STORY = "Story"
+    const val CHAPTER = "Chapter"
+    const val SCENE = "Scene"
+
     val SUGGESTED: List<String> = listOf(
+        STORY, CHAPTER, SCENE,
         "Character", "Kingdom", "City", "Village", "Continent", "Organization",
         "Faction", "Creature", "Species", "Religion", "Magic System",
         "Technology", "Artifact", "Historical Event"
@@ -44,7 +49,10 @@ class Node private constructor(
     initialType: String,
     initialSummary: String,
     initialStatus: NodeStatus,
-    initialTags: List<String>
+    initialTags: List<String>,
+    initialParentNodeId: String?,
+    initialDisplayOrder: Int,
+    initialIsPinned: Boolean
 ) : Entity(id = id, createdAt = createdAt, modifiedAt = modifiedAt) {
 
     var name: String = initialName
@@ -57,6 +65,17 @@ class Node private constructor(
         private set
 
     var status: NodeStatus = initialStatus
+        private set
+
+    /** Hierarchy support (Phase 9C) — Chapters belong to Stories, Scenes to Chapters. */
+    var parentNodeId: String? = initialParentNodeId
+        private set
+
+    /** Sibling-scoped sequence (Phase 9C). */
+    var displayOrder: Int = initialDisplayOrder
+        private set
+
+    var isPinned: Boolean = initialIsPinned
         private set
 
     private val mutableTags: MutableList<String> = initialTags.toMutableList()
@@ -114,9 +133,32 @@ class Node private constructor(
         }
     }
 
+    fun move(newParentId: String?, newOrder: Int) {
+        parentNodeId = newParentId
+        displayOrder = newOrder
+        touch()
+    }
+
+    fun reorder(newOrder: Int) {
+        displayOrder = newOrder
+        touch()
+    }
+
+    fun togglePin() {
+        isPinned = !isPinned
+        touch()
+    }
+
     companion object {
         /** Create Node (LCD-009, Chapter 6's "New Node -> Choose Type -> Enter Name -> Create"). */
-        fun create(name: String, type: String, summary: String = "", tags: List<String> = emptyList()): Node {
+        fun create(
+            name: String,
+            type: String,
+            summary: String = "",
+            tags: List<String> = emptyList(),
+            parentNodeId: String? = null,
+            displayOrder: Int = 0
+        ): Node {
             val now = Instant.now().toString()
             return Node(
                 id = UuidService.generate(),
@@ -126,7 +168,10 @@ class Node private constructor(
                 initialType = type.trim(),
                 initialSummary = summary,
                 initialStatus = NodeStatus.ACTIVE,
-                initialTags = tags
+                initialTags = tags,
+                initialParentNodeId = parentNodeId,
+                initialDisplayOrder = displayOrder,
+                initialIsPinned = false
             )
         }
 
@@ -139,7 +184,13 @@ class Node private constructor(
             type: String,
             summary: String,
             status: NodeStatus,
-            tags: List<String>
-        ): Node = Node(id, createdAt, modifiedAt, name.trim(), type.trim(), summary, status, tags)
+            tags: List<String>,
+            parentNodeId: String? = null,
+            displayOrder: Int = 0,
+            isPinned: Boolean = false
+        ): Node = Node(
+            id, createdAt, modifiedAt, name.trim(), type.trim(), summary, status, tags,
+            parentNodeId, displayOrder, isPinned
+        )
     }
 }

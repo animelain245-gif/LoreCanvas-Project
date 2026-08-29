@@ -51,7 +51,13 @@ class NodeRepository(
      * ALREADY_EXISTS check), parent Project exists (structurally
      * guaranteed by this class's scoping — see class doc comment).
      */
-    fun create(name: String, type: String, summary: String = ""): LcResult<Node, RepositoryError> {
+    fun create(
+        name: String,
+        type: String,
+        summary: String = "",
+        parentNodeId: String? = null,
+        displayOrder: Int = 0
+    ): LcResult<Node, RepositoryError> {
         val validation = NodeValidator.validateForCreate(name, type)
         if (validation is ValidationResult.Invalid) {
             val reason = validation.errors.joinToString { it.message }
@@ -59,7 +65,13 @@ class NodeRepository(
             return LcResult.fail(RepositoryError.ValidationFailed(reason))
         }
 
-        val node = Node.create(name = name, type = type, summary = summary)
+        val node = Node.create(
+            name = name,
+            type = type,
+            summary = summary,
+            parentNodeId = parentNodeId,
+            displayOrder = displayOrder
+        )
 
         return when (val storageResult = nodeStorage.createNode(projectDirectory, node)) {
             is LcResult.Fail -> {
@@ -73,6 +85,41 @@ class NodeRepository(
             }
         }
     }
+
+    /**
+     * Recursively deletes a Node and all its descendants (Phase 9C).
+     * Used for cascading deletes of Story -> Chapter -> Scene.
+     */
+    fun deleteRecursive(nodeId: String): LcResult<Unit, RepositoryError> {
+        // 1. Find all children
+        val children = listByParent(nodeId)
+        for (child in children) {
+            val result = deleteRecursive(child.id)
+            if (result is LcResult.Fail) return result
+        }
+
+        // 2. Delete Cards for this node (Storage handles this directly)
+        cardStorage?.deleteCardsForNode(projectDirectory, nodeId)
+
+        // 3. Delete the node itself
+        return when (val storageResult = nodeStorage.deleteNode(projectDirectory, nodeId)) {
+            is LcResult.Fail -> {
+                logger.error("Node deletion failed", storageResult.error.message)
+                LcResult.fail(RepositoryError.Storage(storageResult.error))
+            }
+            is LcResult.Ok -> {
+                logger.info("Node deleted", nodeId)
+                eventBus.publish(NodeEvent.NodeDeleted(nodeId))
+                LcResult.ok(Unit)
+            }
+        }
+    }
+
+    fun listByParent(parentId: String?): List<Node> =
+        list().filter { it.parentNodeId == parentId }.sortedBy { it.displayOrder }
+
+    fun getNextOrder(parentId: String?): Int =
+        (listByParent(parentId).maxOfOrNull { it.displayOrder } ?: -1) + 1
 
     /**
      * Save (LCD-009, Chapter 7 — Node Editing Workflow): "Select Node ->

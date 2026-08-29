@@ -5,8 +5,10 @@ import java.time.Instant
 
 /** LCD-005 Ch.10 — starting suggestions; Card Type stays a free-form String, same reasoning as NodeTypes. */
 object CardTypes {
+    const val PROSE = "Prose"
+
     val SUGGESTED: List<String> = listOf(
-        "Rich Text", "Markdown", "Statistics", "Image", "Table",
+        PROSE, "Rich Text", "Markdown", "Statistics", "Image", "Table",
         "Checklist", "Quote", "Reference", "External Link", "Notes"
     )
 }

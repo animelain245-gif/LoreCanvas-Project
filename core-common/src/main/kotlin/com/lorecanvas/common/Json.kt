@@ -307,5 +307,8 @@ fun JsonValue.JsonObject.requireString(field: String): String =
 fun JsonValue.JsonObject.optionalString(field: String, default: String = ""): String =
     (this[field] as? JsonValue.JsonString)?.value ?: default
 
+fun JsonValue.JsonObject.optionalInt(field: String, default: Int = 0): Int =
+    (this[field] as? JsonValue.JsonNumber)?.value?.toInt() ?: default
+
 fun JsonValue.JsonObject.stringList(field: String): List<String> =
     (this[field] as? JsonValue.JsonArray)?.items?.mapNotNull { (it as? JsonValue.JsonString)?.value } ?: emptyList()

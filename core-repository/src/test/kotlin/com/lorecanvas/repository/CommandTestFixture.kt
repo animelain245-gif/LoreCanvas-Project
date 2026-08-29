@@ -18,15 +18,15 @@ import kotlin.io.path.absolutePathString
  * not a scratch script standing in for them.
  */
 abstract class CommandTestFixture {
-    protected lateinit var projectDir: java.io.File
-    protected lateinit var eventBus: EventBus
-    protected lateinit var nodeRepo: NodeRepository
-    protected lateinit var cardRepo: CardRepository
-    protected lateinit var relRepo: RelationshipRepository
-    protected lateinit var timelineRepo: TimelineRepository
-    protected lateinit var history: CommandHistory
+    lateinit var projectDir: java.io.File
+    lateinit var eventBus: EventBus
+    lateinit var nodeRepo: NodeRepository
+    lateinit var cardRepo: CardRepository
+    lateinit var relRepo: RelationshipRepository
+    lateinit var timelineRepo: TimelineRepository
+    lateinit var history: CommandHistory
 
-    protected fun setUpFixture() {
+    fun setUpFixture() {
         projectDir = Files.createTempDirectory("lorecanvas_test_").toFile()
         eventBus = EventBus()
         val nodeFileStorage = NodeFileStorage()

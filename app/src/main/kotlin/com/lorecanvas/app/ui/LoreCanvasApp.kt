@@ -153,6 +153,33 @@ private sealed class UiState {
         val status: String? = null,
         val isError: Boolean = false
     ) : UiState()
+
+    data class Manuscript(
+        val project: Project,
+        val ctx: WorkspaceContext,
+        val stories: List<Node> = emptyList(),
+        val chapters: Map<String, List<Node>> = emptyMap(),
+        val scenes: Map<String, List<Node>> = emptyMap()
+    ) : UiState()
+
+    data class ProseEditor(
+        val project: Project,
+        val ctx: WorkspaceContext,
+        val scene: Node,
+        val proseCard: Card,
+        val snapshot: String, // snap content
+        val pinnedNodes: List<Node> = emptyList(),
+        val isDirty: Boolean = false,
+        val status: String? = null,
+        val isError: Boolean = false
+    ) : UiState()
+
+    data class ManuscriptPreview(
+        val project: Project,
+        val ctx: WorkspaceContext,
+        val title: String,
+        val content: String
+    ) : UiState()
 }
 
 private fun sanitizeDirectoryName(name: String): String {
@@ -219,6 +246,53 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
             )
             val nodes = withContext(Dispatchers.IO) { ctx.nodeRepository.list() }
             uiState = UiState.Workspace(project = project, ctx = ctx, nodes = nodes)
+        }
+    }
+
+    fun enterManuscript(project: Project, ctx: WorkspaceContext) {
+        scope.launch {
+            val stories = withContext(Dispatchers.IO) { ctx.nodeRepository.listByParent(null).filter { it.type == com.lorecanvas.domain.NodeTypes.STORY } }
+            val chapters = mutableMapOf<String, List<Node>>()
+            val scenes = mutableMapOf<String, List<Node>>()
+            
+            stories.forEach { story ->
+                val storyChapters = withContext(Dispatchers.IO) { ctx.nodeRepository.listByParent(story.id) }
+                chapters[story.id] = storyChapters
+                storyChapters.forEach { chapter ->
+                    scenes[chapter.id] = withContext(Dispatchers.IO) { ctx.nodeRepository.listByParent(chapter.id) }
+                }
+            }
+            
+            uiState = UiState.Manuscript(project, ctx, stories, chapters, scenes)
+        }
+    }
+
+    fun enterProseEditor(project: Project, ctx: WorkspaceContext, scene: Node) {
+        scope.launch {
+            val cards = withContext(Dispatchers.IO) { ctx.cardRepository.listForNode(scene.id) }
+            val proseCard = cards.find { it.type == com.lorecanvas.domain.CardTypes.PROSE }
+                ?: withContext(Dispatchers.IO) { 
+                    ctx.cardRepository.create(scene.id, "Prose", com.lorecanvas.domain.CardTypes.PROSE).let { (it as LcResult.Ok).value }
+                }
+            val pinnedNodes = withContext(Dispatchers.IO) { ctx.nodeRepository.list().filter { it.isPinned } }
+            uiState = UiState.ProseEditor(project, ctx, scene, proseCard, proseCard.content, pinnedNodes)
+        }
+    }
+
+    fun compileAndPreview(project: Project, ctx: WorkspaceContext, storyNode: Node) {
+        scope.launch {
+            val sb = StringBuilder()
+            val chapters = withContext(Dispatchers.IO) { ctx.nodeRepository.listByParent(storyNode.id) }
+            chapters.forEach { chapter ->
+                sb.append("\n\n").append(chapter.name.uppercase()).append("\n\n")
+                val scenes = withContext(Dispatchers.IO) { ctx.nodeRepository.listByParent(chapter.id) }
+                scenes.forEach { scene ->
+                    val cards = withContext(Dispatchers.IO) { ctx.cardRepository.listForNode(scene.id) }
+                    val prose = cards.find { it.type == com.lorecanvas.domain.CardTypes.PROSE }?.content ?: ""
+                    sb.append(prose).append("\n\n")
+                }
+            }
+            uiState = UiState.ManuscriptPreview(project, ctx, storyNode.name, sb.toString())
         }
     }
 
@@ -351,7 +425,88 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                         }
                         uiState = UiState.ImportPicker(state.project, state.ctx, files)
                     }
+                },
+                onStartWriting = {
+                    scope.launch {
+                        val stories = withContext(Dispatchers.IO) { state.ctx.nodeRepository.listByParent(null).filter { it.type == com.lorecanvas.domain.NodeTypes.STORY } }
+                        if (stories.isEmpty()) {
+                            val command = com.lorecanvas.repository.CreateStoryHierarchyCommand(state.ctx.nodeRepository, state.ctx.cardRepository)
+                            withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
+                            command.createdScene?.let { enterProseEditor(state.project, state.ctx, it) }
+                        } else {
+                            enterManuscript(state.project, state.ctx)
+                        }
+                    }
+                },
+                onOpenManuscript = { enterManuscript(state.project, state.ctx) }
+            )
+        }
+
+        is UiState.Manuscript -> {
+            ManuscriptScreen(
+                stories = state.stories,
+                chapters = state.chapters,
+                scenes = state.scenes,
+                onOpenScene = { scene -> enterProseEditor(state.project, state.ctx, scene) },
+                onPreviewStory = { story -> compileAndPreview(state.project, state.ctx, story) },
+                onReorderNodes = { parentId, newOrderIds ->
+                    scope.launch {
+                        val previousOrder = withContext(Dispatchers.IO) { state.ctx.nodeRepository.listByParent(parentId).map { it.id } }
+                        val command = com.lorecanvas.repository.ReorderStoryNodeCommand(state.ctx.nodeRepository, previousOrder, newOrderIds)
+                        withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
+                        enterManuscript(state.project, state.ctx)
+                    }
+                },
+                onBack = {
+                    scope.launch {
+                        val nodes = withContext(Dispatchers.IO) { state.ctx.nodeRepository.list() }
+                        uiState = UiState.Workspace(state.project, state.ctx, nodes)
+                    }
                 }
+            )
+        }
+
+        is UiState.ManuscriptPreview -> {
+            ManuscriptPreviewScreen(
+                title = state.title,
+                content = state.content,
+                onBack = { enterManuscript(state.project, state.ctx) }
+            )
+        }
+
+        is UiState.ProseEditor -> {
+            ProseEditorScreen(
+                scene = state.scene,
+                prose = state.proseCard.content,
+                pinnedNodes = state.pinnedNodes,
+                isDirty = state.isDirty,
+                statusMessage = state.status,
+                isError = state.isError,
+                onUpdateProse = { newProse ->
+                    state.proseCard.updateContent(newProse)
+                    uiState = state.copy(isDirty = true, status = null)
+                },
+                onSave = {
+                    scope.launch {
+                        val oldSnapshot = com.lorecanvas.repository.CardEditCommands.Snapshot(
+                            title = state.proseCard.title,
+                            type = state.proseCard.type,
+                            content = state.snapshot,
+                            tags = state.proseCard.tags
+                        )
+                        val saveCmd = withContext(Dispatchers.IO) {
+                            com.lorecanvas.repository.CardEditCommands.buildSaveCommand(state.ctx.cardRepository, state.proseCard, oldSnapshot)
+                        }
+                        if (saveCmd == null) {
+                            uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
+                        } else {
+                            withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(saveCmd) }
+                            uiState = state.copy(isDirty = false, status = "Saved.", isError = false, snapshot = state.proseCard.content)
+                        }
+                    }
+                },
+                onBack = { enterManuscript(state.project, state.ctx) },
+                onOpenReference = { node -> enterNodeEditor(state.project, state.ctx, node, emptyList()) }
             )
         }
 
