@@ -51,7 +51,13 @@ class NodeRepository(
      * ALREADY_EXISTS check), parent Project exists (structurally
      * guaranteed by this class's scoping — see class doc comment).
      */
-    fun create(name: String, type: String, summary: String = ""): LcResult<Node, RepositoryError> {
+    fun create(
+        name: String,
+        type: String,
+        summary: String = "",
+        parentNodeId: String? = null,
+        displayOrder: Int = 0
+    ): LcResult<Node, RepositoryError> {
         val validation = NodeValidator.validateForCreate(name, type)
         if (validation is ValidationResult.Invalid) {
             val reason = validation.errors.joinToString { it.message }
@@ -59,7 +65,13 @@ class NodeRepository(
             return LcResult.fail(RepositoryError.ValidationFailed(reason))
         }
 
-        val node = Node.create(name = name, type = type, summary = summary)
+        val node = Node.create(
+            name = name,
+            type = type,
+            summary = summary,
+            parentNodeId = parentNodeId,
+            displayOrder = displayOrder
+        )
 
         return when (val storageResult = nodeStorage.createNode(projectDirectory, node)) {
             is LcResult.Fail -> {
@@ -70,6 +82,26 @@ class NodeRepository(
                 logger.info("Node created", node.id)
                 eventBus.publish(NodeEvent.NodeCreated(node.id))
                 LcResult.ok(node)
+            }
+        }
+    }
+
+    fun listByParent(parentId: String?): List<Node> =
+        list().filter { it.parentNodeId == parentId }.sortedBy { it.displayOrder }
+
+    fun getNextOrder(parentId: String?): Int =
+        (listByParent(parentId).maxOfOrNull { it.displayOrder } ?: -1) + 1
+
+    /**
+     * Re-sequences siblings to ensure contiguous displayOrder (0, 1, 2...)
+     * with no gaps or duplicates. (Phase 9C closure).
+     */
+    fun normalizeOrders(parentId: String?) {
+        val siblings = listByParent(parentId)
+        siblings.forEachIndexed { index, node ->
+            if (node.displayOrder != index) {
+                node.reorder(index)
+                save(node)
             }
         }
     }
@@ -170,6 +202,28 @@ class NodeRepository(
 
         return blockers
     }
+
+    /**
+     * Restore (redo-of-create support for [CreateNodeCommand]): re-inserts
+     * an *already-constructed* [Node] — same id, same everything — back
+     * into storage. Distinct from [create], which always mints a fresh id
+     * via [Node.create], and from [save], which requires the id already
+     * exist ([NodeStorage.saveNode]'s NOT_FOUND check). Neither of those
+     * can re-insert a Node whose file was just deleted by an undo, which
+     * is exactly the situation redo needs to handle.
+     */
+    fun restore(node: Node): LcResult<Unit, RepositoryError> =
+        when (val storageResult = nodeStorage.createNode(projectDirectory, node)) {
+            is LcResult.Fail -> {
+                logger.error("Node restore failed to persist", storageResult.error.message)
+                LcResult.fail(RepositoryError.Storage(storageResult.error))
+            }
+            is LcResult.Ok -> {
+                logger.info("Node restored", node.id)
+                eventBus.publish(NodeEvent.NodeCreated(node.id))
+                LcResult.ok(Unit)
+            }
+        }
 
     fun list(): List<Node> = nodeStorage.listNodes(projectDirectory)
 

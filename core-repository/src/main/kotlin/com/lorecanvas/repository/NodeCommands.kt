@@ -33,9 +33,43 @@ class CreateNodeCommand(
     var createdNode: Node? = null
         private set
 
+    /**
+     * Preserves the specific validation/storage error when [create] fails
+     * (e.g. a blank name), so the UI can show it instead of a generic
+     * message. Doesn't touch the [Command] interface — this is a plain
+     * additive property, same shape as [createdNode].
+     */
+    var lastError: RepositoryError? = null
+        private set
+
+    /**
+     * [CommandHistory.redo] re-invokes [execute] rather than having a
+     * separate "redo" path — correct for every other Command in this
+     * file, since renaming/re-tagging/etc. are naturally idempotent to
+     * repeat. Create is the one exception: [NodeRepository.create] always
+     * mints a *fresh* UUID via [Node.create], so calling it a second time
+     * on redo would silently produce a different Node than the one undo
+     * just deleted, orphaning any UI reference to the original. This flag
+     * makes redo re-insert the *same* Node object via [NodeRepository.restore]
+     * instead of minting a new one. (Plain [NodeRepository.save] won't
+     * work here either — it requires the id already exist in storage,
+     * which it won't right after undo deleted it.)
+     */
+    private var hasCreatedOnce = false
+
     override fun execute() {
-        val result = nodeRepository.create(name, type, summary)
-        if (result is com.lorecanvas.common.LcResult.Ok) createdNode = result.value
+        if (!hasCreatedOnce) {
+            val result = nodeRepository.create(name, type, summary)
+            when (result) {
+                is com.lorecanvas.common.LcResult.Ok -> {
+                    createdNode = result.value
+                    hasCreatedOnce = true
+                }
+                is com.lorecanvas.common.LcResult.Fail -> lastError = result.error
+            }
+        } else {
+            createdNode?.let { nodeRepository.restore(it) }
+        }
     }
 
     /** Undoing a create removes the Node — the one case where this module does call delete(), on a Node this same command just made. */
@@ -121,6 +155,20 @@ class ToggleNodeArchiveCommand(private val nodeRepository: NodeRepository, priva
 
     override fun undo() {
         if (wasArchived) node.archive() else node.restore()
+        nodeRepository.save(node)
+    }
+}
+
+class ToggleNodePinCommand(private val nodeRepository: NodeRepository, private val node: Node) : Command {
+    override val label: String = if (node.isPinned) "Unpin Node" else "Pin Node"
+    
+    override fun execute() {
+        node.togglePin()
+        nodeRepository.save(node)
+    }
+
+    override fun undo() {
+        node.togglePin()
         nodeRepository.save(node)
     }
 }

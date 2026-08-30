@@ -1,0 +1,177 @@
+LORECANVAS — PROJECT HISTORY
+============================
+A dated record of the project from initial planning through the current
+state. Compiled from Claude conversation export timestamps and Git commit
+history. Where only a date range is available (not a specific day), that
+is stated explicitly rather than guessed at.
+
+2026-07-19 to 2026-07-21 — PLANNING
+------------------------------------
+- Project concept defined: an offline-first, writer-focused worldbuilding
+  and story-planning application for Android (Kotlin + Jetpack Compose).
+- Full architecture planned out in a separate conversation before any code
+  was written: a written specification set (LCD-001 through LCD-017)
+  covering domain model, storage, repository, command/undo-redo system,
+  search, graph, plugins, and UI/UX principles.
+- An "Architecture Manual" defined 10 core engines (Core, Storage,
+  Repository, Node, Card, Link, Query, Template, Workspace, Plugin, UI)
+  with explicit ownership rules (e.g. Card owns content, Query is
+  retrieval-only, Workspace never owns project data).
+- A milestone-driven build order was established (source-of-truth
+  verification -> backend architecture -> backend testing -> command/
+  undo-redo completion -> UI command integration -> ... -> release
+  preparation), later followed closely by the implementation work below.
+
+2026-07-22 to 2026-08-18 — INITIAL IMPLEMENTATION (Phases 1-7)
+-----------------------------------------------------------------
+Built across a single long-running conversation (spanning roughly a
+month, with multiple sandbox resets along the way). Specific per-day
+dates within this range aren't available; what follows is the
+substance of what got built, not a day-by-day log:
+- 9 pure-Kotlin core modules created with zero Android dependencies,
+  deliberately, for a future desktop port: core-common, core-domain,
+  core-validation, core-events, core-repository, core-storage,
+  core-search, core-graph, core-plugin.
+- Domain models: Project, Node, Card, Relationship + RelationshipContext,
+  Timeline + TimelineEvent, Template, Entity.
+- Full file-based Storage layer: one Storage/FileStorage/Serializer trio
+  per entity type, plus a version-tagged ExportBundleSerializer for
+  import/export.
+- Repository layer: one Repository per entity, with validation,
+  error handling (RepositoryError/LcResult), and event publishing
+  (EventBus) on every mutation.
+- Command/undo-redo skeleton built (core-commands: Command interface,
+  CommandHistory), but only wired up for Node (NodeCommands.kt) —
+  Card, Relationship, and Timeline were left without Commands at this
+  stage.
+- Search (SearchIndex + SearchIndexCache) and Graph (GraphBuilder +
+  GraphCache) built, both Repository-backed and event-driven.
+- Plugin system scaffolded (LoreCanvasPlugin/PluginContext/
+  PluginRegistry + a StatisticsPlugin example).
+- Full Compose UI built out: workspace, graph view, Node/Card/
+  Relationship/Timeline editors, template list, search, import picker,
+  project list — around 10 screens, all calling repositories directly
+  (no Command routing yet).
+- A real performance bug found through actual measurement, not
+  speculation: adding Timeline events one at a time rewrote the entire
+  Timeline file each time (100 events -> 270ms, 500 -> 905ms,
+  1,000 -> 2,727ms — super-linear). Fixed with a bulk
+  TimelineRepository.addEvents() (2,000 events in one call -> 190ms).
+- Batch/Compound Commands added (CompoundCommand, CommandHistory
+  introspection: nextUndoLabel/nextRedoLabel/executedLabels()).
+- Template categories added, plus three built-in templates (Character/
+  Location/Organization) that ship with every project, are protected
+  from deletion, and merge with user-created templates.
+- Storage corruption and missing-file handling tested across every
+  entity type (a corrupted or missing file is skipped/reported cleanly,
+  not crashed on).
+- Sandbox smoke-test scripts used throughout for verification (not yet
+  part of the project's real test infrastructure at this point).
+
+2026-08-18 — FIRST GITHUB COMMITS
+------------------------------------
+- Repository animelain245-gif/LoreCanvas-Project created on GitHub.
+- Commit f027900 "Initial LoreCanvas Project" — the Phase 1-7 work
+  above pushed as the project's baseline.
+- Commit e2a0f23 "Update README with current progress and performance
+  issues" — documented the Phase 7 state (performance fix, batch
+  commands, template categories) and named the next milestone: Card/
+  Relationship/Timeline still had no Commands, and the UI didn't call
+  CommandHistory at all.
+
+2026-08-21 — LONG BUILD CONVERSATION ENDS
+--------------------------------------------
+- The original implementation conversation's last recorded activity.
+  Work in progress at that point (re-applying Card/Relationship/
+  Timeline Command classes after a sandbox reset) had not been saved
+  to the uploaded project zip or to GitHub.
+
+2026-08-22 — CURRENT SESSION
+--------------------------------
+All of the following happened in one continuous session, on branch
+claude/card-relationship-timeline-commands, verified against a fresh
+GitHub clone at each step (not assumed from memory):
+
+- Commit 6322453 "Add Card/Relationship/Timeline Commands; fix
+  Create-command redo bug"
+  - Wrote CardCommands.kt, RelationshipCommands.kt, TimelineCommands.kt,
+    completing the Command coverage NodeCommands.kt alone had provided
+    since Phase 6.
+  - Found and fixed a real bug via an executable smoke test, not just
+    compilation: CommandHistory.redo() re-invoked execute(), but every
+    Create-type Command's execute() unconditionally minted a fresh id —
+    so undo-then-redo silently created a different entity than the one
+    undone. Fixed by adding restore(entity) to every repository
+    (Node/Card/Relationship/Timeline) and using it on the redo path.
+  - Verified by compiling all core modules together (a real Kotlin
+    1.9.24 toolchain was set up in-session, since the environment's
+    default was a broken 1.3-era package) and running an executable
+    smoke test against real file storage.
+
+- Commit 96f496a "Wire Compose UI mutations through CommandHistory
+  (UI Command Integration)"
+  - Audited LoreCanvasApp.kt and found commandHistory already
+    constructed and threaded through every screen, but never called.
+  - Routed Node/Card/Relationship/Timeline creation, and Timeline event
+    create/edit/remove, through commandHistory.execute().
+  - Built NodeEditCommands.kt / CardEditCommands.kt /
+    RelationshipEditCommands.kt / TimelineEditCommands.kt: new plain-
+    Kotlin bridge files that diff a field snapshot (taken when an
+    editor opens) against the live edited object at Save time, batching
+    every changed field into one CompoundCommand so Save becomes one
+    atomic undo step.
+  - Found and fixed a second real bug: TimelineEditorScreen's rename
+    field mutated Timeline.name on every keystroke, but nothing ever
+    called timelineRepository.save() for it — a renamed Timeline was
+    silently never persisted. Fixed by committing the rename on
+    navigating back.
+  - Delete operations, and Relationship's addContext, deliberately left
+    as direct repository calls, consistent with the architecture
+    decisions documented in the Command files themselves.
+  - App module (Compose) verified only by static inspection — no
+    Android SDK/Compose libraries reachable from this environment.
+
+- Commit c9e2bb4 "Add real Gradle test suite; fix Create-command
+  validation error propagation"
+  - Moved the session's sandbox smoke tests into the project's actual
+    test infrastructure: core-repository/src/test/kotlin, using the
+    kotlin("test") + JUnit Platform wiring every module already had.
+  - CommandTestFixture, NodeCommandsTest, CardCommandsTest,
+    RelationshipCommandsTest, TimelineCommandsTest, CompoundCommandTest,
+    UiBoundaryTest — 28 tests total.
+  - Installed a real JUnit5 platform (via apt, since Maven Central was
+    unreachable) and ran the tests through the actual
+    junit-platform-console-standalone launcher, the same runner
+    Gradle's useJUnitPlatform() delegates to. 28/28 passed.
+  - Fixed the validation-error-propagation gap: Create-type Commands now
+    expose lastError: RepositoryError?, so the UI shows the real
+    validation message again instead of a generic one.
+
+- Commit 2b4dccc "Reconcile README with actual current repository
+  state"
+  - Audited every "current status" and "next milestone" claim in
+    README.md against the actual code (not assumed) and corrected five
+    stale statements, most importantly: the README had claimed the UI
+    still bypassed CommandHistory, which was no longer true.
+  - Documentation-only change; 28/28 tests reconfirmed passing
+    afterward.
+
+CURRENT STATE (as of this file's creation)
+---------------------------------------------
+Branch: claude/card-relationship-timeline-commands
+Commit: 2b4dccc
+Verified by real compilation and execution: all 11 core-* Kotlin
+  modules, and 28/28 JUnit5 tests covering every Command type,
+  CompoundCommand, the two bugs above, and the UI-Save-flow bridge
+  logic.
+Verified by static inspection only: the actual Compose UI code
+  (LoreCanvasApp.kt).
+Not yet verified — BLOCKED BY ENVIRONMENT: the real Android/Gradle
+  build itself. No network path to Google's Maven, Maven Central, or
+  the Gradle Plugin Portal exists from the sandbox this project has
+  been developed in. This branch has not yet been merged to main.
+
+NEXT STEP
+---------
+Run the real Android/Gradle build (./gradlew build test) somewhere
+with genuine network access, and report the result back.
