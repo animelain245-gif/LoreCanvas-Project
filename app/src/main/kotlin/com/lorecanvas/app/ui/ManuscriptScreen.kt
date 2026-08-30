@@ -18,6 +18,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.lorecanvas.domain.Node
 
 @Composable
@@ -28,8 +35,15 @@ fun ManuscriptScreen(
     onOpenScene: (Node) -> Unit,
     onPreviewStory: (Node) -> Unit,
     onReorderNodes: (parentId: String?, List<String>) -> Unit,
+    onAddChapter: (storyId: String) -> Unit,
+    onAddScene: (chapterId: String) -> Unit,
+    onDeleteHierarchy: (nodeId: String) -> Unit,
+    onMoveNode: (nodeId: String, newParentId: String?) -> Unit,
     onBack: () -> Unit
 ) {
+    var nodeToDelete by remember { mutableStateOf<Node?>(null) }
+    var sceneToMove by remember { mutableStateOf<Node?>(null) }
+
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         TextButton(onClick = onBack) { Text("← Back to Workspace") }
         Spacer(Modifier.height(16.dp))
@@ -43,11 +57,20 @@ fun ManuscriptScreen(
         LazyColumn {
             stories.forEach { story ->
                 item {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text(story.name, style = MaterialTheme.typography.titleLarge)
-                        Button(onClick = { onPreviewStory(story) }) { Text("Preview") }
+                        Row {
+                            Button(onClick = { onPreviewStory(story) }) { Text("Preview") }
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { nodeToDelete = story }) {
+                                Text("Delete")
+                            }
+                        }
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = { onAddChapter(story.id) }, modifier = Modifier.padding(top = 8.dp)) {
+                        Text("+ Add Chapter")
+                    }
+                    Spacer(Modifier.height(16.dp))
                 }
                 
                 val storyChapters = chapters[story.id] ?: emptyList()
@@ -55,6 +78,12 @@ fun ManuscriptScreen(
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("  ${chapter.name}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { onAddScene(chapter.id) }) {
+                                Text("+ Scene")
+                            }
+                            TextButton(onClick = { nodeToDelete = chapter }) {
+                                Text("Delete")
+                            }
                             TextButton(onClick = { 
                                 if (index > 0) {
                                     val newOrder = storyChapters.map { it.id }.toMutableList()
@@ -90,6 +119,12 @@ fun ManuscriptScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
                                 Text(scene.name, modifier = Modifier.weight(1f).padding(8.dp))
+                                TextButton(onClick = { sceneToMove = scene }) {
+                                    Text("Move")
+                                }
+                                TextButton(onClick = { nodeToDelete = scene }) {
+                                    Text("Delete")
+                                }
                                 TextButton(onClick = { 
                                     if (sceneIndex > 0) {
                                         val newOrder = chapterScenes.map { it.id }.toMutableList()
@@ -118,5 +153,50 @@ fun ManuscriptScreen(
                 }
             }
         }
+    }
+
+    nodeToDelete?.let { node ->
+        AlertDialog(
+            onDismissRequest = { nodeToDelete = null },
+            title = { Text("Delete ${node.type}?") },
+            text = { Text("Are you sure you want to delete \"${node.name}\"? This will also delete all its contents and cannot be undone (except via Undo).") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteHierarchy(node.id)
+                    nodeToDelete = null
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { nodeToDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    sceneToMove?.let { scene ->
+        AlertDialog(
+            onDismissRequest = { sceneToMove = null },
+            title = { Text("Move Scene to Chapter") },
+            text = {
+                Column {
+                    val allChapters = chapters.values.flatten()
+                    allChapters.forEach { chapter ->
+                        TextButton(
+                            onClick = {
+                                onMoveNode(scene.id, chapter.id)
+                                sceneToMove = null
+                            },
+                            enabled = chapter.id != scene.parentNodeId,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(chapter.name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { sceneToMove = null }) { Text("Cancel") }
+            }
+        )
     }
 }

@@ -64,6 +64,7 @@ fun NodeEditorScreen(
     onUpdateSummary: (String) -> Unit,
     onAddTag: (String) -> Unit,
     onArchiveToggle: () -> Unit,
+    onTogglePin: () -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit,
     onBack: () -> Unit,
@@ -146,6 +147,9 @@ fun NodeEditorScreen(
         Spacer(Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(onClick = onSave) { Text("Save") }
+            OutlinedButton(onClick = onTogglePin) {
+                Text(if (node.isPinned) "Unpin" else "Pin")
+            }
             OutlinedButton(onClick = onArchiveToggle) {
                 Text(if (node.status == NodeStatus.ARCHIVED) "Restore" else "Archive")
             }

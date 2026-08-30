@@ -86,40 +86,25 @@ class NodeRepository(
         }
     }
 
-    /**
-     * Recursively deletes a Node and all its descendants (Phase 9C).
-     * Used for cascading deletes of Story -> Chapter -> Scene.
-     */
-    fun deleteRecursive(nodeId: String): LcResult<Unit, RepositoryError> {
-        // 1. Find all children
-        val children = listByParent(nodeId)
-        for (child in children) {
-            val result = deleteRecursive(child.id)
-            if (result is LcResult.Fail) return result
-        }
-
-        // 2. Delete Cards for this node (Storage handles this directly)
-        cardStorage?.deleteCardsForNode(projectDirectory, nodeId)
-
-        // 3. Delete the node itself
-        return when (val storageResult = nodeStorage.deleteNode(projectDirectory, nodeId)) {
-            is LcResult.Fail -> {
-                logger.error("Node deletion failed", storageResult.error.message)
-                LcResult.fail(RepositoryError.Storage(storageResult.error))
-            }
-            is LcResult.Ok -> {
-                logger.info("Node deleted", nodeId)
-                eventBus.publish(NodeEvent.NodeDeleted(nodeId))
-                LcResult.ok(Unit)
-            }
-        }
-    }
-
     fun listByParent(parentId: String?): List<Node> =
         list().filter { it.parentNodeId == parentId }.sortedBy { it.displayOrder }
 
     fun getNextOrder(parentId: String?): Int =
         (listByParent(parentId).maxOfOrNull { it.displayOrder } ?: -1) + 1
+
+    /**
+     * Re-sequences siblings to ensure contiguous displayOrder (0, 1, 2...)
+     * with no gaps or duplicates. (Phase 9C closure).
+     */
+    fun normalizeOrders(parentId: String?) {
+        val siblings = listByParent(parentId)
+        siblings.forEachIndexed { index, node ->
+            if (node.displayOrder != index) {
+                node.reorder(index)
+                save(node)
+            }
+        }
+    }
 
     /**
      * Save (LCD-009, Chapter 7 — Node Editing Workflow): "Select Node ->

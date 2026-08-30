@@ -457,6 +457,34 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                         enterManuscript(state.project, state.ctx)
                     }
                 },
+                onAddChapter = { storyId ->
+                    scope.launch {
+                        val command = com.lorecanvas.repository.CreateChapterCommand(state.ctx.nodeRepository, storyId, "New Chapter")
+                        withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
+                        enterManuscript(state.project, state.ctx)
+                    }
+                },
+                onAddScene = { chapterId ->
+                    scope.launch {
+                        val command = com.lorecanvas.repository.CreateSceneCommand(state.ctx.nodeRepository, state.ctx.cardRepository, chapterId, "New Scene")
+                        withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
+                        enterManuscript(state.project, state.ctx)
+                    }
+                },
+                onDeleteHierarchy = { nodeId ->
+                    scope.launch {
+                        val command = com.lorecanvas.repository.DeleteStoryHierarchyCommand(state.ctx.nodeRepository, state.ctx.cardRepository, nodeId)
+                        withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
+                        enterManuscript(state.project, state.ctx)
+                    }
+                },
+                onMoveNode = { nodeId, newParentId ->
+                    scope.launch {
+                        val command = com.lorecanvas.repository.MoveNodeCommand(state.ctx.nodeRepository, nodeId, newParentId)
+                        withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
+                        enterManuscript(state.project, state.ctx)
+                    }
+                },
                 onBack = {
                     scope.launch {
                         val nodes = withContext(Dispatchers.IO) { state.ctx.nodeRepository.list() }
@@ -541,6 +569,10 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                 },
                 onArchiveToggle = {
                     if (state.node.status == NodeStatus.ARCHIVED) state.node.restore() else state.node.archive()
+                    uiState = state.copy(isDirty = true, status = null)
+                },
+                onTogglePin = {
+                    state.node.togglePin()
                     uiState = state.copy(isDirty = true, status = null)
                 },
                 onSave = {

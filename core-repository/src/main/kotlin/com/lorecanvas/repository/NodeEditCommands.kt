@@ -41,10 +41,11 @@ object NodeEditCommands {
         val type: String,
         val summary: String,
         val tags: List<String>,
-        val status: NodeStatus
+        val status: NodeStatus,
+        val isPinned: Boolean
     ) {
         companion object {
-            fun of(node: Node): Snapshot = Snapshot(node.name, node.type, node.summary, node.tags, node.status)
+            fun of(node: Node): Snapshot = Snapshot(node.name, node.type, node.summary, node.tags, node.status, node.isPinned)
         }
     }
 
@@ -77,6 +78,10 @@ object NodeEditCommands {
             // ToggleNodeArchiveCommand captures wasArchived only at construction, so the revert must happen first here too.
             if (snapshot.status == NodeStatus.ARCHIVED) node.archive() else node.restore()
             commands.add(ToggleNodeArchiveCommand(nodeRepository, node))
+        }
+        if (node.isPinned != snapshot.isPinned) {
+            node.togglePin() // revert
+            commands.add(ToggleNodePinCommand(nodeRepository, node))
         }
         val addedTags = node.tags.filter { it !in snapshot.tags }
         for (tag in addedTags) {

@@ -158,3 +158,17 @@ class ToggleNodeArchiveCommand(private val nodeRepository: NodeRepository, priva
         nodeRepository.save(node)
     }
 }
+
+class ToggleNodePinCommand(private val nodeRepository: NodeRepository, private val node: Node) : Command {
+    override val label: String = if (node.isPinned) "Unpin Node" else "Pin Node"
+    
+    override fun execute() {
+        node.togglePin()
+        nodeRepository.save(node)
+    }
+
+    override fun undo() {
+        node.togglePin()
+        nodeRepository.save(node)
+    }
+}
