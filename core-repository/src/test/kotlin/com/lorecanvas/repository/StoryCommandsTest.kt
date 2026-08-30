@@ -166,29 +166,52 @@ class StoryCommandsTest : CommandTestFixture() {
     }
 
     @Test
-    fun testCreateStoryHierarchyRollbackOnPartialFailure() {
-        // We simulate a partial failure by providing a "bad" card repository
-        // (but since I can't easily swap repo in existing command, I'll check the logic)
-        // Actually, let's just verify the contiguous displayOrder requirement in StoryCommands.
-        
+    fun testCreateStoryHierarchySequencing() {
         val story = nodeRepo.create("Story", NodeTypes.STORY).let { (it as com.lorecanvas.common.LcResult.Ok).value }
         val chapter = nodeRepo.create("Chapter", NodeTypes.CHAPTER, parentNodeId = story.id, displayOrder = 0).let { (it as com.lorecanvas.common.LcResult.Ok).value }
         
-        // Add a chapter at the end
+        // Add a second chapter, verify order is 1
         val cmd = CreateChapterCommand(nodeRepo, story.id, "Chapter 2")
         history.execute(cmd)
-        
         assertEquals(1, cmd.createdChapter?.displayOrder)
         
-        // Add a scene at the end
-        val sceneCmd = CreateSceneCommand(nodeRepo, cardRepo, chapter.id, "Scene 2")
+        // Add a scene to the first chapter, verify order is 0 (as getNextOrder would return)
+        val sceneCmd = CreateSceneCommand(nodeRepo, cardRepo, chapter.id, "Scene 1")
         history.execute(sceneCmd)
-        
-        assertEquals(0, nodeRepo.getByParent(chapter.id).find { it.name == "Scene 1" }?.displayOrder ?: 0) // wait, Scene 1 doesn't exist yet in this test setup
-        // Let's rely on getNextOrder
+        assertEquals(0, sceneCmd.createdScene?.displayOrder)
     }
 
-    private fun NodeRepository.getByParent(parentId: String?) = listByParent(parentId)
+    @Test
+    fun testCreateStoryHierarchyRollbackOnPartialFailure() {
+        // Construct a CardRepository with a storage that fails on every create
+        val failingCardRepo = CardRepository(
+            projectDirectory = projectDir,
+            cardStorage = object : com.lorecanvas.storage.CardStorage {
+                override fun createCard(projectDirectory: File, card: com.lorecanvas.domain.Card) = 
+                    com.lorecanvas.common.LcResult.fail(com.lorecanvas.storage.StorageError(com.lorecanvas.storage.StorageErrorType.IO_ERROR, "Simulated failure"))
+                override fun saveCard(projectDirectory: File, card: com.lorecanvas.domain.Card) = com.lorecanvas.common.LcResult.ok(Unit)
+                override fun loadCard(projectDirectory: File, cardId: String) = com.lorecanvas.common.LcResult.fail(com.lorecanvas.storage.StorageError(com.lorecanvas.storage.StorageErrorType.NOT_FOUND, ""))
+                override fun deleteCard(projectDirectory: File, cardId: String) = com.lorecanvas.common.LcResult.ok(Unit)
+                override fun cardExists(projectDirectory: File, cardId: String) = false
+                override fun listCards(projectDirectory: File) = emptyList<com.lorecanvas.domain.Card>()
+                override fun deleteCardsForNode(projectDirectory: File, nodeId: String) = com.lorecanvas.common.LcResult.ok(Unit)
+            },
+            nodeStorage = com.lorecanvas.storage.NodeFileStorage(),
+            eventBus = eventBus
+        )
+
+        val command = CreateStoryHierarchyCommand(nodeRepo, failingCardRepo, "Failing Story")
+        
+        // This will attempt to create Story -> Chapter -> Scene -> Prose (FAIL)
+        command.execute()
+        
+        // Created references should be cleared by rollback()
+        assertTrue(command.createdStory == null, "Story reference should be cleared")
+        assertTrue(command.createdScene == null, "Scene reference should be cleared")
+        
+        // Repository should be empty (rollback deleted the Nodes)
+        assertTrue(nodeRepo.list().isEmpty(), "Node repository should be empty after rollback")
+    }
 
     @Test
     fun testPinPersists() {
