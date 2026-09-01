@@ -14,6 +14,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.lorecanvas.app.ui.theme.Ok
 import com.lorecanvas.app.ui.theme.Pending
 import com.lorecanvas.domain.Node
+import kotlinx.coroutines.delay
 
 @Composable
 fun ProseEditorScreen(
@@ -33,12 +35,22 @@ fun ProseEditorScreen(
     statusMessage: String?,
     isError: Boolean,
     onUpdateProse: (String) -> Unit,
+    onAutoSave: () -> Unit,
     onSave: () -> Unit,
     onBack: () -> Unit,
     onOpenReference: (Node) -> Unit
 ) {
     var textField by remember(scene.id) { mutableStateOf(prose) }
     var showSidebar by remember { mutableStateOf(true) }
+
+    // Auto-save debounce logic
+    LaunchedEffect(textField) {
+        if (textField != prose) {
+            onUpdateProse(textField)
+            delay(2000) // Wait for 2 seconds of inactivity
+            onAutoSave()
+        }
+    }
 
     Row(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.weight(1f).padding(24.dp)) {

@@ -226,6 +226,25 @@ class StoryCommandsTest : CommandTestFixture() {
         assertFalse(nodeRepo.get(node.id)!!.isPinned)
     }
 
+    @Test
+    fun testProsePersistence() {
+        val scene = nodeRepo.create("Scene", NodeTypes.SCENE).let { (it as com.lorecanvas.common.LcResult.Ok).value }
+        val card = cardRepo.create(scene.id, "Prose", CardTypes.PROSE).let { (it as com.lorecanvas.common.LcResult.Ok).value }
+        
+        val newContent = "Some new prose content"
+        card.updateContent(newContent)
+        
+        // Simulate save logic in LoreCanvasApp
+        val oldSnapshot = CardEditCommands.Snapshot(card.title, card.type, "", emptyList())
+        val saveCmd = CardEditCommands.buildSaveCommand(cardRepo, card, oldSnapshot)
+        assertNotNull(saveCmd)
+        history.execute(saveCmd)
+        
+        // Verify it reached the storage
+        val reloaded = cardRepo.get(card.id)
+        assertEquals(newContent, reloaded?.content)
+    }
+
     private fun assertFalse(condition: Boolean) {
         if (condition) throw AssertionError("Expected false")
     }

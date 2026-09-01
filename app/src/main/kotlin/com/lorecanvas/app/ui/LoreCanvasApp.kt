@@ -503,6 +503,38 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
         }
 
         is UiState.ProseEditor -> {
+            suspend fun performSave(silent: Boolean = false): Boolean {
+                val oldSnapshot = com.lorecanvas.repository.CardEditCommands.Snapshot(
+                    title = state.proseCard.title,
+                    type = state.proseCard.type,
+                    content = state.snapshot,
+                    tags = state.proseCard.tags
+                )
+                val saveCmd = withContext(Dispatchers.IO) {
+                    com.lorecanvas.repository.CardEditCommands.buildSaveCommand(state.ctx.cardRepository, state.proseCard, oldSnapshot)
+                }
+                return if (saveCmd == null) {
+                    if (!silent) uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
+                    true
+                } else {
+                    val result = withContext(Dispatchers.IO) {
+                        try {
+                            state.ctx.commandHistory.execute(saveCmd)
+                            true
+                        } catch (_: Exception) {
+                            false
+                        }
+                    }
+                    if (result) {
+                        uiState = state.copy(isDirty = false, status = if (silent) "Auto-saved." else "Saved.", isError = false, snapshot = state.proseCard.content)
+                        true
+                    } else {
+                        uiState = state.copy(status = "Save failed.", isError = true)
+                        false
+                    }
+                }
+            }
+
             ProseEditorScreen(
                 scene = state.scene,
                 prose = state.proseCard.content,
@@ -514,31 +546,39 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                     state.proseCard.updateContent(newProse)
                     uiState = state.copy(isDirty = true, status = null)
                 },
-                onSave = {
+                onAutoSave = { scope.launch { performSave(silent = true) } },
+                onSave = { scope.launch { performSave() } },
+                onBack = {
                     scope.launch {
-                        val oldSnapshot = com.lorecanvas.repository.CardEditCommands.Snapshot(
-                            title = state.proseCard.title,
-                            type = state.proseCard.type,
-                            content = state.snapshot,
-                            tags = state.proseCard.tags
-                        )
-                        val saveCmd = withContext(Dispatchers.IO) {
-                            com.lorecanvas.repository.CardEditCommands.buildSaveCommand(state.ctx.cardRepository, state.proseCard, oldSnapshot)
-                        }
-                        if (saveCmd == null) {
-                            uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
-                        } else {
-                            withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(saveCmd) }
-                            uiState = state.copy(isDirty = false, status = "Saved.", isError = false, snapshot = state.proseCard.content)
-                        }
+                        if (state.isDirty) performSave(silent = true)
+                        enterManuscript(state.project, state.ctx)
                     }
                 },
-                onBack = { enterManuscript(state.project, state.ctx) },
-                onOpenReference = { node -> enterNodeEditor(state.project, state.ctx, node, emptyList()) }
+                onOpenReference = { node ->
+                    scope.launch {
+                        if (state.isDirty) performSave(silent = true)
+                        enterNodeEditor(state.project, state.ctx, node, emptyList())
+                    }
+                }
             )
         }
 
         is UiState.NodeEditor -> {
+            suspend fun performSave(silent: Boolean = false) {
+                val command = withContext(Dispatchers.IO) {
+                    com.lorecanvas.repository.NodeEditCommands.buildSaveCommand(state.ctx.nodeRepository, state.node, state.snapshot)
+                }
+                if (command == null) {
+                    if (!silent) uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
+                } else {
+                    withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
+                    uiState = state.copy(
+                        isDirty = false, status = if (silent) "Auto-saved." else "Saved.", isError = false,
+                        snapshot = com.lorecanvas.repository.NodeEditCommands.Snapshot.of(state.node)
+                    )
+                }
+            }
+
             NodeEditorScreen(
                 node = state.node,
                 cards = state.cards,
@@ -575,22 +615,7 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                     state.node.togglePin()
                     uiState = state.copy(isDirty = true, status = null)
                 },
-                onSave = {
-                    scope.launch {
-                        val command = withContext(Dispatchers.IO) {
-                            com.lorecanvas.repository.NodeEditCommands.buildSaveCommand(state.ctx.nodeRepository, state.node, state.snapshot)
-                        }
-                        if (command == null) {
-                            uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
-                        } else {
-                            withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
-                            uiState = state.copy(
-                                isDirty = false, status = "Saved.", isError = false,
-                                snapshot = com.lorecanvas.repository.NodeEditCommands.Snapshot.of(state.node)
-                            )
-                        }
-                    }
-                },
+                onSave = { scope.launch { performSave() } },
                 onDelete = {
                     scope.launch {
                         val result = withContext(Dispatchers.IO) { state.ctx.nodeRepository.delete(state.node.id) }
@@ -605,6 +630,7 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                 },
                 onBack = {
                     scope.launch {
+                        if (state.isDirty) performSave(silent = true)
                         val nodes = withContext(Dispatchers.IO) { state.ctx.nodeRepository.list() }
                         uiState = UiState.Workspace(state.project, state.ctx, nodes)
                     }
@@ -661,6 +687,21 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
         }
 
         is UiState.CardEditor -> {
+            suspend fun performSave(silent: Boolean = false) {
+                val command = withContext(Dispatchers.IO) {
+                    com.lorecanvas.repository.CardEditCommands.buildSaveCommand(state.ctx.cardRepository, state.card, state.snapshot)
+                }
+                if (command == null) {
+                    if (!silent) uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
+                } else {
+                    withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
+                    uiState = state.copy(
+                        isDirty = false, status = if (silent) "Auto-saved." else "Saved.", isError = false,
+                        snapshot = com.lorecanvas.repository.CardEditCommands.Snapshot.of(state.card)
+                    )
+                }
+            }
+
             CardEditorScreen(
                 card = state.card,
                 isDirty = state.isDirty,
@@ -670,22 +711,7 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                 onChangeType = { state.card.changeType(it); uiState = state.copy(isDirty = true, status = null) },
                 onUpdateContent = { state.card.updateContent(it); uiState = state.copy(isDirty = true, status = null) },
                 onAddTag = { state.card.addTag(it); uiState = state.copy(isDirty = true, status = null) },
-                onSave = {
-                    scope.launch {
-                        val command = withContext(Dispatchers.IO) {
-                            com.lorecanvas.repository.CardEditCommands.buildSaveCommand(state.ctx.cardRepository, state.card, state.snapshot)
-                        }
-                        if (command == null) {
-                            uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
-                        } else {
-                            withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
-                            uiState = state.copy(
-                                isDirty = false, status = "Saved.", isError = false,
-                                snapshot = com.lorecanvas.repository.CardEditCommands.Snapshot.of(state.card)
-                            )
-                        }
-                    }
-                },
+                onSave = { scope.launch { performSave() } },
                 onDelete = {
                     scope.launch {
                         withContext(Dispatchers.IO) { state.ctx.cardRepository.delete(state.card.id) }
@@ -697,6 +723,7 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                 },
                 onBack = {
                     scope.launch {
+                        if (state.isDirty) performSave(silent = true)
                         val cards = withContext(Dispatchers.IO) { state.ctx.cardRepository.listForNode(state.node.id) }
                         val rels = withContext(Dispatchers.IO) { state.ctx.relationshipRepository.listForNode(state.node.id) }
                         val allNodes = withContext(Dispatchers.IO) { state.ctx.nodeRepository.list() }

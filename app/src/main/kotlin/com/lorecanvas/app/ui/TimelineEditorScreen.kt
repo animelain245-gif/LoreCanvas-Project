@@ -49,6 +49,7 @@ fun TimelineEditorScreen(
     var nameField by remember(timeline.id) { mutableStateOf(timeline.name) }
     var showAddEventDialog by remember { mutableStateOf(false) }
     var editingEvent by remember { mutableStateOf<TimelineEvent?>(null) }
+    var eventToDeleteId by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState())) {
         TextButton(onClick = onBack) { Text("← Back to Timelines") }
@@ -87,7 +88,7 @@ fun TimelineEditorScreen(
                         Text(event.date, style = MaterialTheme.typography.labelSmall)
                         Row {
                             TextButton(onClick = { editingEvent = event }) { Text("Edit") }
-                            TextButton(onClick = { onRemoveEvent(event.id) }) { Text("Remove") }
+                            TextButton(onClick = { eventToDeleteId = event.id }) { Text("Remove") }
                         }
                     }
                     Text(event.title, style = MaterialTheme.typography.titleMedium)
@@ -176,6 +177,23 @@ fun TimelineEditorScreen(
                 ) { Text("Save") }
             },
             dismissButton = { TextButton(onClick = { editingEvent = null }) { Text("Cancel") } }
+        )
+    }
+
+    eventToDeleteId?.let { eventId ->
+        AlertDialog(
+            onDismissRequest = { eventToDeleteId = null },
+            title = { Text("Remove Event?") },
+            text = { Text("This can be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        eventToDeleteId = null
+                        onRemoveEvent(eventId)
+                    }
+                ) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { eventToDeleteId = null }) { Text("Cancel") } }
         )
     }
 }
