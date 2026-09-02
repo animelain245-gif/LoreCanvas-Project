@@ -504,6 +504,7 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
 
         is UiState.ProseEditor -> {
             suspend fun performSave(silent: Boolean = false): Boolean {
+                val cardId = state.proseCard.id
                 val oldSnapshot = com.lorecanvas.repository.CardEditCommands.Snapshot(
                     title = state.proseCard.title,
                     type = state.proseCard.type,
@@ -513,8 +514,12 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                 val saveCmd = withContext(Dispatchers.IO) {
                     com.lorecanvas.repository.CardEditCommands.buildSaveCommand(state.ctx.cardRepository, state.proseCard, oldSnapshot)
                 }
+                
+                val currentBefore = uiState
+                if (currentBefore !is UiState.ProseEditor || currentBefore.proseCard.id != cardId) return true
+
                 return if (saveCmd == null) {
-                    if (!silent) uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
+                    if (!silent) uiState = currentBefore.copy(isDirty = false, status = "Nothing to save.", isError = false)
                     true
                 } else {
                     val result = withContext(Dispatchers.IO) {
@@ -525,13 +530,16 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
                             false
                         }
                     }
-                    if (result) {
-                        uiState = state.copy(isDirty = false, status = if (silent) "Auto-saved." else "Saved.", isError = false, snapshot = state.proseCard.content)
-                        true
-                    } else {
-                        uiState = state.copy(status = "Save failed.", isError = true)
-                        false
+                    
+                    val currentAfter = uiState
+                    if (currentAfter is UiState.ProseEditor && currentAfter.proseCard.id == cardId) {
+                        if (result) {
+                            uiState = currentAfter.copy(isDirty = false, status = if (silent) "Auto-saved." else "Saved.", isError = false, snapshot = state.proseCard.content)
+                        } else {
+                            uiState = currentAfter.copy(status = "Save failed.", isError = true)
+                        }
                     }
+                    result
                 }
             }
 
@@ -565,17 +573,26 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
 
         is UiState.NodeEditor -> {
             suspend fun performSave(silent: Boolean = false) {
+                val nodeId = state.node.id
                 val command = withContext(Dispatchers.IO) {
                     com.lorecanvas.repository.NodeEditCommands.buildSaveCommand(state.ctx.nodeRepository, state.node, state.snapshot)
                 }
+                
+                val currentBefore = uiState
+                if (currentBefore !is UiState.NodeEditor || currentBefore.node.id != nodeId) return
+
                 if (command == null) {
-                    if (!silent) uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
+                    if (!silent) uiState = currentBefore.copy(isDirty = false, status = "Nothing to save.", isError = false)
                 } else {
                     withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
-                    uiState = state.copy(
-                        isDirty = false, status = if (silent) "Auto-saved." else "Saved.", isError = false,
-                        snapshot = com.lorecanvas.repository.NodeEditCommands.Snapshot.of(state.node)
-                    )
+                    
+                    val currentAfter = uiState
+                    if (currentAfter is UiState.NodeEditor && currentAfter.node.id == nodeId) {
+                        uiState = currentAfter.copy(
+                            isDirty = false, status = if (silent) "Auto-saved." else "Saved.", isError = false,
+                            snapshot = com.lorecanvas.repository.NodeEditCommands.Snapshot.of(state.node)
+                        )
+                    }
                 }
             }
 
@@ -688,17 +705,26 @@ fun LoreCanvasApp(projectsRootDirectory: File, exportsRootDirectory: File) {
 
         is UiState.CardEditor -> {
             suspend fun performSave(silent: Boolean = false) {
+                val cardId = state.card.id
                 val command = withContext(Dispatchers.IO) {
                     com.lorecanvas.repository.CardEditCommands.buildSaveCommand(state.ctx.cardRepository, state.card, state.snapshot)
                 }
+                
+                val currentBefore = uiState
+                if (currentBefore !is UiState.CardEditor || currentBefore.card.id != cardId) return
+
                 if (command == null) {
-                    if (!silent) uiState = state.copy(isDirty = false, status = "Nothing to save.", isError = false)
+                    if (!silent) uiState = currentBefore.copy(isDirty = false, status = "Nothing to save.", isError = false)
                 } else {
                     withContext(Dispatchers.IO) { state.ctx.commandHistory.execute(command) }
-                    uiState = state.copy(
-                        isDirty = false, status = if (silent) "Auto-saved." else "Saved.", isError = false,
-                        snapshot = com.lorecanvas.repository.CardEditCommands.Snapshot.of(state.card)
-                    )
+                    
+                    val currentAfter = uiState
+                    if (currentAfter is UiState.CardEditor && currentAfter.card.id == cardId) {
+                        uiState = currentAfter.copy(
+                            isDirty = false, status = if (silent) "Auto-saved." else "Saved.", isError = false,
+                            snapshot = com.lorecanvas.repository.CardEditCommands.Snapshot.of(state.card)
+                        )
+                    }
                 }
             }
 
