@@ -132,6 +132,23 @@ class TimelineRepository(
     /** LCD-006 Ch.9 — "Sort Events." Returns the timeline's events in chronological order. */
     fun sortedEvents(timeline: Timeline): List<TimelineEvent> = timeline.sortedEvents()
 
+    /**
+     * Restore (redo-of-create support for [CreateTimelineCommand]) — see
+     * [NodeRepository.restore]'s doc comment for the full rationale.
+     * Re-inserts an already-constructed [Timeline] at its existing id,
+     * rather than minting a fresh one ([create]) or requiring the id
+     * already exist ([save]).
+     */
+    fun restore(timeline: Timeline): LcResult<Unit, RepositoryError> =
+        when (val result = timelineStorage.createTimeline(projectDirectory, timeline)) {
+            is LcResult.Fail -> LcResult.fail(RepositoryError.Storage(result.error))
+            is LcResult.Ok -> {
+                logger.info("Timeline restored", timeline.id)
+                eventBus.publish(TimelineChangeEvent.TimelineCreated(timeline.id))
+                LcResult.ok(Unit)
+            }
+        }
+
     fun list(): List<Timeline> = timelineStorage.listTimelines(projectDirectory)
 
     fun get(timelineId: String): Timeline? = (timelineStorage.loadTimeline(projectDirectory, timelineId) as? LcResult.Ok)?.value

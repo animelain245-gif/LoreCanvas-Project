@@ -90,6 +90,23 @@ class RelationshipRepository(
             }
         }
 
+    /**
+     * Restore (redo-of-create support for [CreateRelationshipCommand]) —
+     * see [NodeRepository.restore]'s doc comment for the full rationale.
+     * Re-inserts an already-constructed [Relationship] at its existing
+     * id, rather than minting a fresh one ([create]) or requiring the id
+     * already exist ([save]).
+     */
+    fun restore(relationship: Relationship): LcResult<Unit, RepositoryError> =
+        when (val result = relationshipStorage.createRelationship(projectDirectory, relationship)) {
+            is LcResult.Fail -> LcResult.fail(RepositoryError.Storage(result.error))
+            is LcResult.Ok -> {
+                logger.info("Relationship restored", relationship.id)
+                eventBus.publish(RelationshipEvent.RelationshipCreated(relationship.id))
+                LcResult.ok(Unit)
+            }
+        }
+
     fun list(): List<Relationship> = relationshipStorage.listRelationships(projectDirectory)
 
     fun listForNode(nodeId: String): List<Relationship> = list().filter { it.involves(nodeId) }

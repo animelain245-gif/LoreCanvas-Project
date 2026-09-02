@@ -11,6 +11,7 @@ interface CardStorage {
     fun deleteCard(projectDirectory: File, cardId: String): LcResult<Unit, StorageError>
     fun cardExists(projectDirectory: File, cardId: String): Boolean
     fun listCards(projectDirectory: File): List<Card>
+    fun deleteCardsForNode(projectDirectory: File, nodeId: String): LcResult<Unit, StorageError>
     fun listCardsForNode(projectDirectory: File, nodeId: String): List<Card> =
         listCards(projectDirectory).filter { it.parentNodeId == nodeId }
 }

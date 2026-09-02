@@ -102,6 +102,23 @@ class CardRepository(
         return LcResult.ok(Unit)
     }
 
+    /**
+     * Restore (redo-of-create support for [CreateCardCommand]) — see
+     * [NodeRepository.restore]'s doc comment for the full rationale.
+     * Re-inserts an already-constructed [Card] at its existing id, rather
+     * than minting a fresh one ([create]) or requiring the id already
+     * exist ([save]).
+     */
+    fun restore(card: Card): LcResult<Unit, RepositoryError> =
+        when (val result = cardStorage.createCard(projectDirectory, card)) {
+            is LcResult.Fail -> LcResult.fail(RepositoryError.Storage(result.error))
+            is LcResult.Ok -> {
+                logger.info("Card restored", card.id)
+                eventBus.publish(CardEvent.CardCreated(card.id))
+                LcResult.ok(Unit)
+            }
+        }
+
     fun listForNode(nodeId: String): List<Card> = cardStorage.listCardsForNode(projectDirectory, nodeId)
 
     /**

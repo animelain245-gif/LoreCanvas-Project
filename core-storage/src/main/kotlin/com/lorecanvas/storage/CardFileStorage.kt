@@ -79,6 +79,15 @@ class CardFileStorage(
     override fun cardExists(projectDirectory: File, cardId: String): Boolean =
         fileManager.exists(cardFile(projectDirectory, cardId))
 
+    override fun deleteCardsForNode(projectDirectory: File, nodeId: String): LcResult<Unit, StorageError> {
+        val cards = listCardsForNode(projectDirectory, nodeId)
+        for (card in cards) {
+            val result = deleteCard(projectDirectory, card.id)
+            if (result is LcResult.Fail) return result
+        }
+        return LcResult.ok(Unit)
+    }
+
     override fun listCards(projectDirectory: File): List<Card> {
         val dir = cardsDirectory(projectDirectory)
         if (!fileManager.exists(dir)) return emptyList()

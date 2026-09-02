@@ -21,6 +21,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
@@ -67,7 +68,9 @@ fun WorkspaceScreen(
     onOpenGraph: () -> Unit,
     onOpenTemplates: () -> Unit,
     onExportProject: () -> Unit,
-    onImportProject: () -> Unit
+    onImportProject: () -> Unit,
+    onStartWriting: () -> Unit,
+    onOpenManuscript: () -> Unit
 ) {
     var nameField by remember(project.id) { mutableStateOf(project.name) }
     var newTag by remember { mutableStateOf("") }
@@ -92,6 +95,8 @@ fun WorkspaceScreen(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Button(onClick = onStartWriting) { Text("Start Writing") }
+                OutlinedButton(onClick = onOpenManuscript) { Text("Story") }
                 OutlinedButton(onClick = onOpenTimelines) { Text("Timeline") }
                 OutlinedButton(onClick = onOpenSearch) { Text("Search") }
                 OutlinedButton(onClick = onOpenGraph) { Text("Graph") }
@@ -238,6 +243,7 @@ private fun NodeRow(node: Node, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreateNodeDialog(
     onDismiss: () -> Unit,
